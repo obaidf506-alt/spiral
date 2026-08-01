@@ -464,3 +464,13 @@ game:GetService("Lighting"):GetPropertyChangedSignal("FogStart"):Connect(removeF
 game:GetService("Lighting"):GetPropertyChangedSignal("FogColor"):Connect(removeFog)
 
 game:GetService("Lighting").Changed:Connect(removeFog)
+
+
+local window = Rayfield:CreateWindow({
+    name = "VibeHub",
+    configuration = {
+        autoSave = true,
+        autoLoad = true,
+        fileName = "MyConfig",
+    },
+})
