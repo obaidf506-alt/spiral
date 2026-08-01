@@ -1,3 +1,10 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local CoreGui = game:GetService("CoreGui")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
 local targetPlaceId = 4104106043
 
 if game.PlaceId ~= targetPlaceId then
@@ -35,10 +42,362 @@ window:Notify({
     duration = 3
 })
 
+local Maintab = window:CreateTab({ name = "Home", icon = 93364949241311 })
 
-local Maintab = window:CreateTab({ name = "Main", icon = 93364949241311 })
+local Visualstab = window:CreateTab({ name = "Visuals", icon = 93364949241311 })
 
-local autofarm = Maintab:CreateToggle({
+local SETTINGS = {
+    MasterESP = false,
+    ShowBoxes = true,
+    ShowTracers = true,
+    ShowHealth = true,
+    ShowNames = true,
+    ShowChams = false,
+    ShowSkeletons = false,
+    
+    ThemeColor = Color3.fromRGB(96, 205, 255),
+    TracerThickness = 1.2,
+    BoxSize = Vector3.new(4, 6, 1),
+    BoxTransparency = 0.7,
+    
+    HealthGradient = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 0, 0)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(255, 255, 0)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(0, 255, 0))
+    })
+}
+
+local espFolder = pcall(function() return CoreGui:FindFirstChild("EliteESP") end) and CoreGui:FindFirstChild("EliteESP") or game:GetService("RobloxReplicatedStorage"):FindFirstChild("EliteESP") or Instance.new("Folder")
+if not espFolder.Parent then
+    espFolder.Name = "EliteESP"
+    espFolder.Parent = pcall(function() return CoreGui end) and CoreGui or game:GetService("RobloxReplicatedStorage")
+end
+
+local cache = {}
+local bonePairs = {
+    {"Head", "UpperTorso"}, {"UpperTorso", "LowerTorso"},
+    {"UpperTorso", "LeftUpperArm"}, {"LeftUpperArm", "LeftLowerArm"}, {"LeftLowerArm", "LeftHand"},
+    {"UpperTorso", "RightUpperArm"}, {"RightUpperArm", "RightLowerArm"}, {"RightLowerArm", "RightHand"},
+    {"LowerTorso", "LeftUpperLeg"}, {"LeftUpperLeg", "LeftLowerLeg"}, {"LeftLowerLeg", "LeftFoot"},
+    {"LowerTorso", "RightUpperLeg"}, {"RightUpperLeg", "RightLowerLeg"}, {"RightLowerLeg", "RightFoot"}
+}
+
+-- Memory Cleaners
+local function destroyESP(player)
+    local data = cache[player]
+    if not data then return end
+
+    if data.Box then data.Box:Destroy() end
+    if data.HealthGui then data.HealthGui:Destroy() end
+    if data.NameTag then data.NameTag:Destroy() end
+    if data.Highlight then data.Highlight:Destroy() end
+    if data.Tracer then data.Tracer:Remove() end
+    
+    if data.Skeleton then
+        for _, line in pairs(data.Skeleton) do
+            line:Remove()
+        end
+    end
+
+    cache[player] = nil
+end
+
+local function clearAllESP()
+    for player, _ in pairs(cache) do
+        destroyESP(player)
+    end
+    if clear_drawing_objects then clear_drawing_objects()
+    elseif Drawing and Drawing.clear then Drawing.clear() end
+end
+
+-- Modular Component Factory
+local function createESP(player)
+    if player == LocalPlayer then return end
+    destroyESP(player)
+
+    local character = player.Character or player.CharacterAdded:Wait()
+    local hrp = character:WaitForChild("HumanoidRootPart", 5)
+    local humanoid = character:WaitForChild("Humanoid", 5)
+    if not hrp or not humanoid then return end
+
+    -- 1. Bounding Boxes
+    local box = Instance.new("BoxHandleAdornment")
+    box.Adornee = hrp
+    box.Size = SETTINGS.BoxSize
+    box.Transparency = SETTINGS.ShowBoxes and SETTINGS.BoxTransparency or 1
+    box.ZIndex = 5
+    box.AlwaysOnTop = true
+    box.Color3 = SETTINGS.ThemeColor
+    box.Parent = espFolder
+
+    -- 2. Chams Overlay
+    local highlight = Instance.new("Highlight")
+    highlight.Adornee = character
+    highlight.FillColor = SETTINGS.ThemeColor
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.FillTransparency = SETTINGS.ShowChams and 0.5 or 1
+    highlight.OutlineTransparency = SETTINGS.ShowChams and 0.2 or 1
+    highlight.Parent = espFolder
+
+    -- 3. Side Vertical Health Bars
+    local healthGui = Instance.new("BillboardGui")
+    healthGui.Adornee = hrp
+    healthGui.Size = UDim2.new(0.45, 0, 5.5, 0)
+    healthGui.StudsOffset = Vector3.new(-2.6, 0, 0)
+    healthGui.AlwaysOnTop = true
+    healthGui.Enabled = SETTINGS.ShowHealth
+    healthGui.Parent = espFolder
+
+    local healthBackground = Instance.new("Frame")
+    healthBackground.Size = UDim2.new(1, 0, 1, 0)
+    healthBackground.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    healthBackground.BorderSizePixel = 0
+    healthBackground.Parent = healthGui
+
+    local healthFill = Instance.new("Frame")
+    healthFill.Size = UDim2.new(1, 0, 1, 0)
+    healthFill.Position = UDim2.new(0, 0, 1, 0)
+    healthFill.AnchorPoint = Vector2.new(0, 1) 
+    healthFill.BackgroundColor3 = Color3.fromRGB(255, 255, 255) 
+    healthFill.BorderSizePixel = 0
+    healthFill.Parent = healthBackground
+
+    local gradient = Instance.new("UIGradient")
+    gradient.Color = SETTINGS.HealthGradient
+    gradient.Rotation = 270 
+    gradient.Parent = healthFill
+
+    -- 4. Scale-Correct Name Tags
+    local nameTag = Instance.new("BillboardGui")
+    nameTag.Adornee = hrp
+    nameTag.Size = UDim2.new(6, 0, 1.2, 0)
+    nameTag.StudsOffset = Vector3.new(0, 3.8, 0)
+    nameTag.AlwaysOnTop = true
+    nameTag.Enabled = SETTINGS.ShowNames
+    nameTag.Parent = espFolder
+
+    local nameLabel = Instance.new("TextLabel")
+    nameLabel.Text = string.format("[%s]", player.DisplayName or player.Name)
+    nameLabel.Size = UDim2.new(1, 0, 1, 0)
+    nameLabel.BackgroundTransparency = 1
+    nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    nameLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    nameLabel.TextStrokeTransparency = 0.2
+    nameLabel.Font = Enum.Font.Code
+    nameLabel.TextScaled = true
+    nameLabel.Parent = nameTag
+
+    -- 5. Bottom Vector Screen Tracers
+    local tracer = Drawing.new("Line")
+    tracer.Color = SETTINGS.ThemeColor
+    tracer.Thickness = SETTINGS.TracerThickness
+    tracer.Transparency = 1
+    tracer.Visible = false
+
+    -- 6. Structured Skeleton Arrays
+    local skeletonLines = {}
+    if character:FindFirstChild("UpperTorso") then
+        for i = 1, #bonePairs do
+            local line = Drawing.new("Line")
+            line.Color = SETTINGS.ThemeColor
+            line.Thickness = 1.5
+            line.Transparency = 1
+            line.Visible = false
+            table.insert(skeletonLines, line)
+        end
+    end
+
+    cache[player] = {
+        Character = character, Humanoid = humanoid, HRP = hrp,
+        Box = box, Highlight = highlight, HealthGui = healthGui,
+        HealthFill = healthFill, NameTag = nameTag, Tracer = tracer,
+        Skeleton = skeletonLines
+    }
+end
+
+-- Global Pipeline Thread Refresh Loop
+RunService.Heartbeat:Connect(function()
+    if not SETTINGS.MasterESP then return end
+
+    local viewportSize = Camera.ViewportSize
+    local screenCenterBottom = Vector2.new(viewportSize.X / 2, viewportSize.Y)
+
+    for player, data in pairs(cache) do
+        local character = data.Character
+        if not character or not character.Parent then
+            destroyESP(player)
+            continue
+        end
+
+        -- Dynamically scale health fill
+        if data.Humanoid and data.Humanoid.Parent and SETTINGS.ShowHealth then
+            local healthPercent = math.clamp(data.Humanoid.Health / data.Humanoid.MaxHealth, 0, 1)
+            data.HealthFill.Size = UDim2.new(1, 0, healthPercent, 0)
+        end
+
+        -- Vector Screen Calculations
+        local hrpPos, onScreen = Camera:WorldToViewportPoint(data.HRP.Position)
+        
+        -- Update Tracer
+        if onScreen and SETTINGS.ShowTracers then
+            data.Tracer.From = screenCenterBottom
+            data.Tracer.To = Vector2.new(hrpPos.X, hrpPos.Y)
+            data.Tracer.Color = SETTINGS.ThemeColor
+            data.Tracer.Visible = true
+        else
+            data.Tracer.Visible = false
+        end
+
+   if SETTINGS.ShowSkeletons and #data.Skeleton > 0 then
+            for idx, pair in ipairs(bonePairs) do
+                local partA = character:FindFirstChild(pair[1]) or (pair[1] == "UpperTorso" and character:FindFirstChild("Torso")) or (pair[1] == "LowerTorso" and character:FindFirstChild("Torso"))
+                local partB = character:FindFirstChild(pair[2]) or (pair[2] == "UpperTorso" and character:FindFirstChild("Torso")) or (pair[2] == "LowerTorso" and character:FindFirstChild("Torso"))
+                local line = data.Skeleton[idx]
+
+                if partA and partB and line then
+                    local posA, onScreenA = Camera:WorldToViewportPoint(partA.Position)
+                    local posB, onScreenB = Camera:WorldToViewportPoint(partB.Position)
+
+                    if onScreenA and onScreenB then
+                        line.From = Vector2.new(posA.X, posA.Y)
+                        line.To = Vector2.new(posB.X, posB.Y)
+                        line.Color = SETTINGS.ThemeColor
+                        line.Visible = true
+                    else
+                        line.Visible = false
+                    end
+                elseif line then
+                    line.Visible = false
+                end
+            end
+        else
+            for _, line in pairs(data.Skeleton) do 
+                line.Visible = false 
+            end
+        end
+    end
+end)
+
+local function setupPlayer(player)
+    player.CharacterAdded:Connect(function()
+        if not SETTINGS.MasterESP then return end
+        player:HasAppearanceLoaded()
+        createESP(player)
+    end)
+    if player.Character and SETTINGS.MasterESP then createESP(player) end
+end
+
+for _, p in ipairs(Players:GetPlayers()) do setupPlayer(p) end
+Players.PlayerAdded:Connect(setupPlayer)
+Players.PlayerRemoving:Connect(destroyESP)
+
+
+-- =============================================================================
+-- UI CONFIGURATION INTERFACES (Appended directly to your existing Visualstab)
+-- =============================================================================
+
+-- Master ESP Toggle Switch
+local esptoggle = Visualstab:CreateToggle({
+    name = "Master Player ESP",
+    flag = "MasterESPState",
+    value = false,
+    callback = function(value)
+        SETTINGS.MasterESP = value
+        if value then
+            for _, p in ipairs(Players:GetPlayers()) do if p ~= LocalPlayer and p.Character then createESP(p) end end
+        else
+            clearAllESP()
+        end
+    end,
+})
+esptoggle:Set(false)
+
+-- Sub-component Specific Toggles
+Visualstab:CreateToggle({
+    name = "Enable 2D Boxes",
+    flag = "ESPBoxes",
+    value = true,
+    callback = function(v) 
+        SETTINGS.ShowBoxes = v 
+        for _, d in pairs(cache) do d.Box.Transparency = v and SETTINGS.BoxTransparency or 1 end
+    end
+})
+
+Visualstab:CreateToggle({
+    name = "Enable Tracers",
+    flag = "ESPTracers",
+    value = true,
+    callback = function(v) 
+        SETTINGS.ShowTracers = v 
+    end
+})
+
+Visualstab:CreateToggle({
+    name = "Enable Health Bars",
+    flag = "ESPHealth",
+    value = true,
+    callback = function(v)
+        SETTINGS.ShowHealth = v
+        for _, d in pairs(cache) do 
+            if d.HealthGui then d.HealthGui.Enabled = v end 
+        end
+    end
+})
+
+Visualstab:CreateToggle({
+    name = "Enable Name Tags",
+    flag = "ESPNames",
+    value = true,
+    callback = function(v)
+        SETTINGS.ShowNames = v
+        for _, d in pairs(cache) do 
+            if d.NameTag then d.NameTag.Enabled = v end 
+        end
+    end
+})
+
+Visualstab:CreateToggle({
+    name = "Enable Character Chams",
+    flag = "ESPChams",
+    value = false,
+    callback = function(v)
+        SETTINGS.ShowChams = v
+        for _, d in pairs(cache) do
+            if d.Highlight then
+                d.Highlight.FillTransparency = v and 0.5 or 1
+                d.Highlight.OutlineTransparency = v and 0.2 or 1
+            end
+        end
+    end
+})
+
+Visualstab:CreateToggle({
+    name = "Enable Skeleton Bones",
+    flag = "ESPSkeletons",
+    value = false,
+    callback = function(v) 
+        SETTINGS.ShowSkeletons = v 
+    end
+})
+
+-- Dynamic Color Picker Integration
+Visualstab:CreateColorPicker({
+    name = "Highlight Color",
+    color = Color3.fromRGB(96, 205, 255),
+    callback = function(color, alpha)
+        SETTINGS.ThemeColor = color
+        for _, d in pairs(cache) do
+            if d.Box then d.Box.Color3 = color end
+            if d.Highlight then d.Highlight.FillColor = color end
+        end
+    end
+})
+
+
+
+local Farmtab = window:CreateTab({ name = "Farm", icon = 93364949241311 })
+
+local autofarm = Farmtab:CreateToggle({
     name = "Auto Farm Streaks / Coins",
     flag = "AutoFarmStreaksNCoins",
     value = _G.SkyBaseToggle or false, -- Starts the UI toggle matching your _G state
@@ -79,6 +438,8 @@ local autofarm = Maintab:CreateToggle({
         end
     end,
 })
+
+
 
 local vu = game:GetService("VirtualUser")
 game:GetService("Players").LocalPlayer.Idled:Connect(function()
