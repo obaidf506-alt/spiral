@@ -18,9 +18,6 @@ local Rayfield = loadstring(game:HttpGet("https://sirius.menu/gen2"))()
 local window = Rayfield:CreateWindow({
     name = "Insane-Elevator 4104106043",
     subtitle = "Rayfield Gen2",
-    configuration = {
-    autoSave = true,
-    autoLoad = true,
 })
 
 window:Notify({
