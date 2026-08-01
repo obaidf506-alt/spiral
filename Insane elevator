@@ -1,0 +1,105 @@
+local targetPlaceId = 4104106043
+
+if game.PlaceId ~= targetPlaceId then
+    game:GetService("Players").LocalPlayer:Kick("Vibehub: Not Supported Game")
+    return
+end
+
+
+local Rayfield = loadstring(game:HttpGet("https://sirius.menu/gen2"))()
+
+local window = Rayfield:CreateWindow({
+    name = "Insane-Elevator 4104106043",
+    subtitle = "Rayfield Gen2",
+})
+
+window:Notify({
+    title = "ToS",
+    content = "By executing this script you agree to Vibehub Term of Service",
+    duration = 3
+})
+
+task.wait(0.5)
+
+window:Notify({
+    title = "Fog",
+    content = "Disabled Fog",
+    duration = 3
+})
+
+task.wait(0.6)
+
+window:Notify({
+    title = "Anti-Afk",
+    content = "Anti-Afk Enabled",
+    duration = 3
+})
+
+
+local Maintab = window:CreateTab({ name = "Main", icon = 93364949241311 })
+
+local autofarm = Maintab:CreateToggle({
+    name = "Auto Farm Streaks / Coins",
+    flag = "AutoFarmStreaksNCoins",
+    value = _G.SkyBaseToggle or false, -- Starts the UI toggle matching your _G state
+    callback = function(value)
+        _G.SkyBaseToggle = value
+
+        local player = game:GetService("Players").LocalPlayer
+        local character = player.Character or player.CharacterAdded:Wait()
+        local hrp = character:WaitForChild("HumanoidRootPart")
+
+        local targetCFrame = CFrame.new(-1916.438965, -411.605774, 857.009888)
+        local skyPosition = targetCFrame.Position + Vector3.new(0, 15000, 0)
+
+        if _G.SkyBaseToggle then
+            hrp.CFrame = targetCFrame
+            task.wait(0.5)
+            
+            local existing = workspace:FindFirstChild("SolaraSkyBase")
+            if existing then existing:Destroy() end
+            
+            local platform = Instance.new("Part")
+            platform.Name = "SolaraSkyBase"
+            platform.Size = Vector3.new(60, 4, 60)
+            platform.Material = Enum.Material.Concrete
+            platform.Anchored = true 
+            platform.CanCollide = true
+            platform.CFrame = CFrame.new(skyPosition)
+            platform.Parent = workspace
+
+            hrp.CFrame = CFrame.new(skyPosition + Vector3.new(0, 5, 0))
+            hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+        else
+            hrp.CFrame = targetCFrame
+            hrp.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+            
+            local platform = workspace:FindFirstChild("SolaraSkyBase")
+            if platform then platform:Destroy() end
+        end
+    end,
+})
+
+local vu = game:GetService("VirtualUser")
+game:GetService("Players").LocalPlayer.Idled:Connect(function()
+    vu:Button2Down(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+    task.wait(1)
+    vu:Button2Up(Vector2.new(0,0), workspace.CurrentCamera.CFrame)
+end)
+
+
+
+local function removeFog()
+    local lighting = game:GetService("Lighting")
+    lighting.FogEnd = 1e10
+    lighting.FogStart = 1e10
+    lighting.FogColor = Color3.new(1, 1, 1)
+end
+
+removeFog()
+
+game:GetService("Lighting"):GetPropertyChangedSignal("FogEnd"):Connect(removeFog)
+game:GetService("Lighting"):GetPropertyChangedSignal("FogStart"):Connect(removeFog)
+game:GetService("Lighting"):GetPropertyChangedSignal("FogColor"):Connect(removeFog)
+
+game:GetService("Lighting").Changed:Connect(removeFog)
